@@ -1,0 +1,39 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account information",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "email", "createdAt"]
+    },
+    "Session": {
+      "title": "CV Review Session",
+      "description": "A saved CV review and analysis result",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner of this session" },
+        "fileName": { "type": "string" },
+        "jobDescription": { "type": "string" },
+        "result": { "type": "object", "description": "The analysis result object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "fileName", "jobDescription", "result", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "users/{userId}/sessions/{sessionId}": {
+      "schema": "Session",
+      "description": "CV review history for a specific user"
+    }
+  }
+}

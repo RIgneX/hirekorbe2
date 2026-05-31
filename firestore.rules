@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Primitives
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    function isSignedIn() { 
+      return request.auth != null && request.auth.token.email_verified == true; 
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isOwner(userId) { return request.auth.uid == userId; }
+
+    // Phase 4: Drafting the Fortress
+    
+    // User Profile
+    function isValidUser(data) {
+      return data.keys().hasAll(['userId', 'email', 'displayName', 'createdAt']) &&
+             data.keys().size() == 4 &&
+             data.userId is string && data.userId.size() <= 128 && data.userId == request.auth.uid &&
+             data.email is string && data.email.size() <= 256 && data.email == request.auth.token.email &&
+             data.displayName is string && data.displayName.size() <= 256 &&
+             data.createdAt is timestamp && data.createdAt == request.time;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isOwner(userId) && isValidId(userId);
+      allow create: if isSignedIn() && isOwner(userId) && isValidId(userId) && isValidUser(incoming());
+      allow update: if isSignedIn() && isOwner(userId) && isValidId(userId) && 
+                    isValidUser(incoming()) &&
+                    // Action: Profile Update
+                    incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email']) &&
+                    incoming().userId == existing().userId &&
+                    incoming().createdAt == existing().createdAt;
+
+      // Sessions subcollection
+      function isValidSession(data) {
+        return data.keys().hasAll(['userId', 'fileName', 'jobDescription', 'result', 'createdAt']) &&
+               data.keys().size() == 5 &&
+               data.userId is string && data.userId.size() <= 128 && data.userId == request.auth.uid &&
+               data.fileName is string && data.fileName.size() <= 256 &&
+               data.jobDescription is string && data.jobDescription.size() <= 20000 &&
+               data.result is map &&
+               data.createdAt is timestamp && data.createdAt == request.time;
+      }
+
+      match /sessions/{sessionId} {
+        // Enforce owner filter on list
+        allow list: if isSignedIn() && isOwner(userId);
+        allow get: if isSignedIn() && isOwner(userId) && isValidId(sessionId);
+        allow create: if isSignedIn() && isOwner(userId) && isValidId(sessionId) && isValidSession(incoming());
+        // No updates allowed for sessions to prevent historical tampering
+        allow update: if false; 
+        allow delete: if isSignedIn() && isOwner(userId) && isValidId(sessionId);
+      }
+    }
+  }
+}
